@@ -18,6 +18,31 @@
     { sel: '#opt-labon', key: 'labOn', store: LAB_KEY, on: 'Compté', off: 'Non compté' },
     { sel: '#opt-petson', key: 'petsOn', store: PETS_KEY, on: 'Comptés', off: 'Non comptés' },
   ];
+  // réduction du Pass d'or choisie pour chaque village ({"home":20}), retenue d'une visite à l'autre
+  // et reprise par le wiki (colonne « durée avec Pass d'or » des tableaux d'amélioration)
+  const GP_KEY = 'avancement-hdv:pass-or';
+  const GP_VALUES = [10, 15, 20];
+  const gpPref = (key) => {
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem(GP_KEY)) || {}; } catch (e) { /* stockage indisponible ou valeur illisible */ }
+    return GP_VALUES.includes(p[key]) ? p[key] : 0;
+  };
+  // choix du menu « Pass d'or » (Mon village et fiches du wiki)
+  const gpOptions = () => [0, ...GP_VALUES].map((v) => ({
+    value: v,
+    label: v ? `−${v} %` : 'Aucun boost',   // court pour le bouton ; la note (ou la ligne) dit « temps et coûts »
+    html: v ? `<span>−${v} %</span> <small>temps et coûts</small>` : '<span>Aucun boost</span>',
+  }));
+  // choix du Pass d'or pour un village (depuis Mon village ou depuis une fiche du wiki) : appliqué et retenu
+  function saveGoldPass(key, v) {
+    v = GP_VALUES.includes(Number(v)) ? Number(v) : 0;
+    if (optsBy[key]) optsBy[key].gp = v;
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem(GP_KEY)) || {}; } catch (e) { /* valeur illisible : repart de zéro */ }
+    if (typeof p !== 'object') p = {};
+    p[key] = v;
+    try { localStorage.setItem(GP_KEY, JSON.stringify(p)); } catch (e) { /* stockage indisponible */ }
+  }
   const IGN_KEY = 'avancement-hdv:ignores';
   const HIDEMAX_KEY = 'avancement-hdv:masquer-max';
   // Icônes officielles du jeu (img/, extraites par ClashKingAssets) : [fichier, nom lu par les lecteurs d'écran]
@@ -31,6 +56,8 @@
     const name = ICONS[k][1];
     return `<img class="${cls}" src="img/${ICONS[k][0]}.webp" alt="${alt == null ? '' : esc(alt)}" title="${esc(name[0].toUpperCase() + name.slice(1))}">`;
   };
+  // chronomètre du jeu, après les durées (même icône que dans le wiki)
+  const TIME_IC = '<img class="stat-ic" src="img/ui/time.png" alt="" title="Temps">';
   // remparts : deux ressources au choix (or ou élixir ; or ouvrier ou élixir ouvrier dans la MDO)
   const wallRes = () => { const w = V.t.buildings[V.wall]; return [w.r || 'G', w.ar || 'E']; };
   const wallIcons = (cls = 'ic') => {
@@ -132,11 +159,27 @@
     if (h >= 1) return `${h} h ${String(m).padStart(2, '0')}`;
     return `${m} min`;
   }
-  function durLong(sec) {
-    const days = sec / 86400;
-    if (days < 2) return dur(sec);
-    if (days < 60) return `${Math.round(days)} j`;
-    return `${nf1.format(days / 30.44)} mois`;
+  // durée longue : jours, puis années, mois et jours. Les mois sont comptés sur le calendrier à partir de
+  // « from » (par défaut maintenant), pour tomber juste avec la date de fin affichée à côté.
+  // long = true : « 6 mois et 20 jours » ; sinon forme courte : « 6 mois 20 j »
+  function durLong(sec, long = false, from = Date.now()) {
+    const nDays = Math.round(sec / 86400);
+    if (sec < 2 * 86400) return dur(sec);
+    const J = (n) => (long ? `${n}\u00a0jour${n > 1 ? 's' : ''}` : `${n}\u00a0j`);
+    if (nDays < 60) return J(nDays);
+    const start = new Date(from), end = new Date(from + nDays * 86400000);
+    const plus = (k) => { const x = new Date(start); x.setMonth(x.getMonth() + k); return x; };
+    let m = 0;
+    while (plus(m + 1) <= end) m++;
+    const d = Math.round((end - plus(m)) / 86400000);
+    const y = Math.floor(m / 12);
+    m %= 12;
+    const parts = [];
+    if (y) parts.push(`${y}\u00a0an${y > 1 ? 's' : ''}`);
+    if (m) parts.push(`${m}\u00a0mois`);
+    if (d) parts.push(J(d));
+    if (!long) return parts.join(' ');
+    return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}` : parts[0];   // pas de coupure entre « et » et les jours
   }
   function ago(ms) {
     const s = ms / 1000;
@@ -368,6 +411,52 @@
     return { ts, now, curTH, th, T, recs, eq, helpers, builders, hutGems, inprog, unknown: [...unknown] };
   }
 
+  // ---------- Améliorations faisables maintenant (onglet Objets magiques) ----------
+  // Pour chaque exemplaire : le chantier en cours (temps restant) ou le niveau suivant autorisé par l'HDV (ou la MDO)
+  // actuel, avec sa durée et son coût. Un livre termine une amélioration, un marteau la fait gratuitement :
+  // la plus longue est celle qui leur fait gagner le plus. cost : 0 pour un chantier en cours (déjà payé).
+  // kind : 'bld' (bâtiments, pièges, arme de l'HDV), 'heroes', 'guardians', 'pets', 'troop', 'siege', 'spell'
+  function upgradeTargets(key) {
+    if (!village || (key === 'bb' && !hasBB(village))) return null;
+    const keep = V;
+    V = VILLAGES[key];
+    try {
+      const now = Date.now();
+      const A = analyze(village, now, null);
+      const gp = (goldPass(key) || 0) / 100;              // le Pass d'or raccourcit les améliorations pas encore lancées
+      const out = [];
+      const add = (o) => { if (o.time > 0) out.push(o); };
+      for (const r of A.recs) {
+        if (r.cat === 'walls' || (r.id === V.hall && r.cat === 'bld')) continue;   // remparts : instantanés ; HDV : plus bas
+        if (r.lvl >= r.max && r.rem == null) continue;
+        const weapon = r.id === 'weapon';
+        const next = rows(r.e)[r.lvl + 1];
+        if (!next) continue;
+        const kind = r.cat === 'lab' ? r.sub : r.cat === 'traps' ? 'bld'
+          : r.cat === 'heroes' && D.guardians && D.guardians[r.id] ? 'guardians' : r.cat;
+        add({
+          kind, id: weapon ? V.hall : r.id, name: r.name, from: r.lvl, to: r.lvl + 1, prog: r.rem != null, missing: r.missing,
+          time: r.rem != null ? r.rem : next[2] * (1 - gp),
+          cost: r.rem != null ? 0 : Math.round(next[1] * (1 - gp)), res: weapon ? V.t.buildings[V.hall].r : r.e.r,
+          pic: weapon ? imgSrc(V.hall, A.curTH) : imgSrc(r.id, r.lvl + 1) || imgSrc(r.id, r.lvl),
+          wiki: weapon ? V.hall : r.id,
+        });
+      }
+      // hôtel de ville (ou maison des ouvriers) : son amélioration est toujours possible jusqu'au dernier niveau
+      const hall = V.t.buildings[V.hall], nextHall = rows(hall)[A.curTH + 1];
+      if (nextHall) {
+        add({
+          kind: 'bld', id: V.hall, name: hall.n, from: A.curTH, to: A.curTH + 1, prog: A.th.rem != null, missing: false,
+          time: A.th.rem != null ? A.th.rem : nextHall[2] * (1 - gp), pic: imgSrc(V.hall, A.curTH + 1), wiki: V.hall,
+          cost: A.th.rem != null ? 0 : Math.round(nextHall[1] * (1 - gp)), res: hall.r,
+        });
+      }
+      return { list: out, curTH: A.curTH, gp: gp * 100, ts: A.ts, short: V.short };
+    } finally {
+      V = keep;
+    }
+  }
+
   // ---------- Estimation du temps ----------
   function estimate(A, o) {
     const B = Math.max(1, Math.round(o.builders) || 1);
@@ -480,7 +569,7 @@
     const finish = E.total > 0
       ? `<div class="sub">vers le ${esc(dtLong.format(A.now + E.total * 1000))}</div><span class="bottleneck">Goulot : ${which(E.which)}</span>`
       : (rest > 0
-        ? `<div class="sub">Sans compter ${off.map((x) => (x === V.labShort ? `le ${V.labShort}` : 'les familiers')).join(' et ')}, où il reste ≈ ${durLong(rest)}.</div>`
+        ? `<div class="sub">Sans compter ${off.map((x) => (x === V.labShort ? `le ${V.labShort}` : 'les familiers')).join(' et ')}, où il reste ≈ ${durLong(rest, true, A.now)}.</div>`
         : `<div class="sub">Tout est au max pour ${V.this}.</div>`);
 
     // ce que l'anneau ne compte pas, écrit en clair (l'équipement dépend des minerais, pas du temps)
@@ -497,7 +586,7 @@
       <div class="stat stat-main has-pic">
         <div class="stat-text">
           <div class="label">Temps pour maxer ${V.the} ${A.T}${offLbl}</div>
-          <div class="value">${E.total > 0 ? '≈ ' + durLong(E.total) : 'Terminé'}</div>
+          <div class="value">${E.total > 0 ? '≈ ' + durLong(E.total, true, A.now) : 'Terminé'}</div>
           ${finish}
         </div>
         ${thPic(A.T)}
@@ -687,12 +776,12 @@
     if (x.cost) costs.push(`<span class="cost">${big(x.cost * costFactor())} ${cat === 'walls' ? wallIcons() : icon(x.res)}</span>`);
     if (gems) costs.push(`<span class="cost" title="Achat des cabanes manquantes">${nf.format(gems)} ${icon('GEM')}</span>`);
     const costTxt = costs.join(' ') || '—';
-    const label = `${esc(x.name)}${x.n > 1 ? ` <span class="muted">×${x.n}</span>` : ''}`;
+    const label = `<span class="wl">${esc(x.name)}</span>${x.n > 1 ? ` <span class="muted">×${x.n}</span>` : ''}`;
     // vignette au niveau le plus haut atteint parmi les exemplaires
     // au max : image du niveau actuel ; sinon (à faire, en cours, à construire) : aperçu au niveau max visé
     const cur = Math.max(...x.lv.keys());
     const pic = x.todo ? thumb(x.id, x.max, `Aperçu au niveau max (${x.max})`) : thumb(x.id, cur, `Niveau ${cur}`);
-    const nameHtml = `<span class="nm">${pic}<span>${label}</span></span>`;
+    const nameHtml = nmLink(x.id, pic, label);
     // classes c-* : sur téléphone, la ligne devient une carte (nom + statut, puis niveau · temps · coût)
     return `<tr class="has-chk${x.ignored ? ' is-ignored' : x.todo ? '' : ' is-done'}">
       ${countCell(x)}
@@ -700,10 +789,16 @@
       <td class="lvls c-meta${lvTxt === '—' ? ' is-empty' : ''}">${lvTxt}</td>
       <td class="num c-meta c-max">${x.max}</td>
       <td class="c-st">${chips.join('')}</td>
-      <td class="num c-meta c-sep${x.time ? '' : ' is-empty'}">${x.time ? dur(x.time) : '—'}</td>
+      <td class="num c-meta c-sep${x.time ? '' : ' is-empty'}">${x.time ? `<span class="cost">${dur(x.time)} ${TIME_IC}</span>` : '—'}</td>
       <td class="num c-meta c-sep${x.cost || gems ? '' : ' is-empty'}">${costTxt}</td>
     </tr>`;
   }
+
+  // image + nom d'un élément du détail : un seul lien vers sa fiche du wiki quand elle existe
+  // (label : le nom dans <span class="wl">, souligné au survol, suivi éventuellement du nombre d'exemplaires)
+  const nmLink = (id, pic, label) => (window.COC_WIKI && window.COC_WIKI.has(id)
+    ? `<a class="nm wiki-link" href="#wiki/${esc(id)}">${pic}<span>${label}</span></a>`
+    : `<span class="nm">${pic}<span>${label}</span></span>`);
 
   // case « Compter » : décochée = élément ignoré. Le label rend toute la cellule cliquable.
   const countCell = (x) => `<td class="chk"><label class="hit" title="Décocher pour ignorer cet élément"><input type="checkbox" data-ignore="${esc(x.id)}"${x.ignored ? '' : ' checked'} aria-label="Compter ${esc(x.name)}"></label></td>`;
@@ -771,7 +866,7 @@
             const ore = q.ore.map((o, i) => (o ? `<span class="cost">${big(o)} ${icon(`O${i + 1}`)}</span>` : '')).filter(Boolean).join(' ') || '—';
             return `<tr class="has-chk${q.ignored ? ' is-ignored' : q.lvl >= q.max ? ' is-done' : ''}">
               ${countCell(q)}
-              <td class="name"><span class="nm">${thumb(q.id)}<span>${esc(q.name)}</span></span></td>
+              <td class="name">${nmLink(q.id, thumb(q.id), `<span class="wl">${esc(q.name)}</span>`)}</td>
               <td class="c-meta c-rar">${q.rar === 'Epic' ? 'Épique' : 'Commun'}</td>
               <td class="num c-meta c-lvnum">${q.lvl}</td>
               <td class="num c-meta c-max">${q.max}</td>
@@ -795,7 +890,7 @@
         return `<span class="chip ok">Max</span>${h.next ? `<small class="next">niv. ${h.next.lvl} à ${V.the} ${h.next.th}</small>` : ''}`;
       };
       const body = vis.map((h) => `<tr class="${h.lvl >= h.max ? 'is-done' : ''}">
-          <td class="name"><span class="nm">${thumb(h.id)}<span>${esc(h.name)}</span></span></td><td class="num c-meta c-lvnum${h.lvl ? '' : ' is-empty'}">${h.lvl || '—'}</td><td class="num c-meta c-max${h.gold ? ' is-empty' : ''}">${h.gold ? '—' : h.max}</td>
+          <td class="name">${nmLink(h.id, thumb(h.id), `<span class="wl">${esc(h.name)}</span>`)}</td><td class="num c-meta c-lvnum${h.lvl ? '' : ' is-empty'}">${h.lvl || '—'}</td><td class="num c-meta c-max${h.gold ? ' is-empty' : ''}">${h.gold ? '—' : h.max}</td>
           <td class="c-st">${status(h)}</td>
           <td class="num c-meta c-sep${h.gems ? '' : ' is-empty'}">${h.gems ? gemsTxt(h.gems) : '—'}</td>
         </tr>`).join('');
@@ -991,11 +1086,7 @@
     $('#dd-builders').closest('.field').querySelector(':scope > small').textContent = V.buildersNote;
     $('#opt-labon .sw-name').textContent = V.labName;
     $('#opt-labon').setAttribute('aria-label', V.labName);
-    menus.gp.set([0, 10, 15, 20].map((v) => ({
-      value: v,
-      label: v ? `−${v} %` : 'Aucun boost',   // court pour le bouton ; la note dessous dit « temps et coûts »
-      html: v ? `<span>−${v} %</span> <small>temps et coûts</small>` : '<span>Aucun boost</span>',
-    })), opts.gp);
+    menus.gp.set(gpOptions(), opts.gp);
     for (const s of SWITCHES) {
       const sw = $(s.sel);
       sw.setAttribute('aria-checked', String(opts[s.key]));
@@ -1108,16 +1199,56 @@
   // Change de village affiché : données, hypothèses, textes et thème (bleu nuit pour la MDO).
   function applyMode(key) {
     V = VILLAGES[key];
-    document.documentElement.dataset.village = key;
-    $('#site-title').textContent = `Avancement ${V.short}`;
-    $('#tagline').textContent = V.tagline;
-    document.title = `Avancement ${V.short}`;
+    refreshHeader();
     for (const b of document.querySelectorAll('#village-switch [data-village]')) b.setAttribute('aria-pressed', String(b.dataset.village === key));
+  }
+
+  // ---------- Onglets : « Mon village » et « Wiki » ----------
+  // L'adresse décide de l'onglet : rien = l'outil, #wiki = la liste du wiki, #wiki/<id> = la fiche d'un élément.
+  let tab = 'tool';
+  let toolScroll = null;    // position dans Mon village au clic sur un nom du détail, pour y revenir depuis le wiki
+  // onglets autres que Mon village : adresse, section, module, sous-titre, titre ; village() donne le thème
+  // (bleu nuit pour la MDO). Les équipements n'existent que dans le village principal.
+  const TABS = {
+    wiki: { mod: () => window.COC_WIKI, title: 'Wiki', tagline: 'Niveaux, coûts, durées et prérequis de tous les éléments du jeu.' },
+    equip: { hash: 'equipements', mod: () => window.COC_EQUIP, title: 'Mes équipements', tagline: 'Combien de minerais pour monter tes équipements au niveau voulu\u00a0?' },
+    magic: { hash: 'objets-magiques', mod: () => window.COC_MAGIC, title: 'Objets magiques', tagline: 'Sur quelle amélioration utiliser tes livres pour gagner le plus de temps\u00a0?' },
+  };
+  // sous-titre, titre de l'onglet, thème (bleu nuit pour la MDO) et favicon selon l'onglet et le village affichés
+  function refreshHeader() {
+    const T = TABS[tab];
+    const m = T && T.mod();
+    const village = m && m.village ? m.village() : T ? 'home' : V.key;
+    document.documentElement.dataset.village = village;
+    $('#tagline').textContent = T ? T.tagline : V.tagline;
+    document.title = T ? `${T.title} — Clash Tracker` : `Avancement ${V.short} — Clash Tracker`;
+    $('#favicon').href = village === 'bb' ? 'img/favicon-bb.png' : 'img/favicon.png';
+  }
+  function route() {
+    const h = decodeURIComponent(location.hash.replace(/^#/, ''));
+    const prev = tab;
+    tab = window.COC_WIKI && (h === 'wiki' || h.startsWith('wiki/')) ? 'wiki'
+      : Object.keys(TABS).find((k) => TABS[k].hash === h && TABS[k].mod()) || 'tool';
+    $('#tool').hidden = tab !== 'tool';
+    for (const k of Object.keys(TABS)) $(`#${k}`).hidden = tab !== k;
+    $('.header-actions').hidden = tab !== 'tool';
+    for (const a of document.querySelectorAll('.tabs a')) {
+      if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
+    if (tab === 'wiki') window.COC_WIKI.show(h.slice(5));
+    else if (tab !== 'tool') TABS[tab].mod().show();
+    refreshHeader();
+    // retour depuis une fiche ouverte par le détail : on revient à la même ligne
+    if (tab === 'tool' && prev === 'wiki' && toolScroll != null) {
+      const y = toolScroll;
+      toolScroll = null;
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
   }
   function setMode(key, remember) {
     if (key === 'bb' && !hasBB(village)) key = 'home';
     applyMode(key);
-    opts = optsBy[key] || (optsBy[key] = defaultOpts(village));
+    opts = optsBy[key] || (optsBy[key] = { ...defaultOpts(village), gp: gpPref(key) });
     if (remember) { try { localStorage.setItem(MODE_KEY, key); } catch (e) { /* stockage indisponible */ } }
     render();
   }
@@ -1192,7 +1323,11 @@
     $('#btn-reset').addEventListener('click', reset);
 
     for (const key of ['target', 'builders', 'app', 'lab', 'gp']) {
-      makeMenu(key, (v) => { opts[key] = Number(v); render(); });
+      makeMenu(key, (v) => {
+        if (key === 'gp') saveGoldPass(V.key, v);
+        else opts[key] = Number(v);
+        render();
+      });
     }
     $('#village-switch').addEventListener('click', (e) => {
       const b = e.target.closest('[data-village]');
@@ -1240,6 +1375,7 @@
     $('#opt-hidemax').addEventListener('click', () => setHideMax(!hideMax));
     $('#details').addEventListener('click', (e) => {
       if (e.target.closest('[data-showmax]')) setHideMax(false);
+      else if (e.target.closest('a.wiki-link')) toolScroll = window.scrollY;
     });
 
     hideMax = readPref(HIDEMAX_KEY) !== '0';
@@ -1247,7 +1383,21 @@
     let saved = null;
     try { saved = localStorage.getItem(STORE_KEY); } catch (e) { /* stockage indisponible */ }
     if (saved) load(saved, false);
+
+    window.addEventListener('hashchange', route);
+    route();
   }
+
+  // outils partagés avec wiki.js
+  // goldPass(key) : réduction du Pass d'or (en %) choisie pour ce village, dans Mon village ou dans le wiki
+  // setGoldPass(key, v) : choix fait depuis le wiki, repris aussitôt par Mon village
+  const goldPass = (key) => (optsBy[key] ? optsBy[key].gp || 0 : gpPref(key));
+  const setGoldPass = (key, v) => {
+    saveGoldPass(key, v);
+    if (village && V.key === key) render();
+  };
+  window.COC_UI = { D, IMG, ICONS, esc, nf, big, dur, durLong, imgSrc, icon, makeMenu, refreshHeader, goldPass, setGoldPass, gpOptions,
+    upgradeTargets, hasBB: () => hasBB(village), village: () => village };
 
   if (!D) {
     showError('Fichier de données introuvable (data/coc-data.js).');

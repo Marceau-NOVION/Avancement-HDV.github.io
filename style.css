@@ -21,6 +21,8 @@
   --warn-soft: #fbf0d9;
   --bad: #a33224;
   --bad-soft: #f8e2de;
+  --gp: #8f5d00;             /* colonnes « Pass d'or » du wiki : titre et teinte orangée */
+  --gp-tint: rgb(240 160 30 / .13);
   --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 6px 20px rgb(0 0 0 / .05);
   --radius: 16px;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -49,6 +51,8 @@
     --warn-soft: #3a2b10;
     --bad: #ef8072;
     --bad-soft: #3e1d19;
+    --gp: #f6bd55;
+    --gp-tint: rgb(240 169 43 / .10);
     --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 6px 20px rgb(0 0 0 / .25);
   }
 }
@@ -77,6 +81,8 @@
   --warn-soft: #33290f;
   --bad: #ff8d84;
   --bad-soft: #3d1c24;
+  --gp: #f6bd55;             /* orange même sur la base des ouvriers (accent bleu) : couleur du Pass d'or */
+  --gp-tint: rgb(240 169 43 / .12);
   --shadow: 0 1px 2px rgb(0 0 0 / .35), 0 8px 24px rgb(2 8 24 / .45);
 }
 :root[data-village="bb"] body {
@@ -104,9 +110,11 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 
 /* ---------- En-tête ---------- */
 .site-header { background: var(--surface); border-bottom: 1px solid var(--border); }
-.header-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 18px; padding-bottom: 18px; flex-wrap: wrap; }
+.header-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 18px; padding-bottom: 12px; flex-wrap: wrap; min-height: 82px; }
 .brand { display: flex; align-items: center; gap: 14px; }
-.logo { width: 40px; height: 40px; color: var(--accent); flex: none; }
+.logo { width: auto; height: 64px; flex: none; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .25)); }
+.logo-bb, :root[data-village="bb"] .logo-home { display: none; }
+:root[data-village="bb"] .logo-bb { display: block; }
 .brand h1 { font-size: 1.35rem; font-weight: 800; letter-spacing: -.01em; }
 .tagline { margin: 2px 0 0; color: var(--muted); font-size: .92rem; }
 .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -123,6 +131,26 @@ code { font-family: var(--mono); font-size: .9em; background: var(--surface-2); 
 .vs-btn:disabled { opacity: .45; cursor: not-allowed; }
 .vs-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
 .vs-ic { width: 26px; height: 26px; object-fit: contain; flex: none; }
+/* onglets « Mon village », « Mes équipements », « Objets magiques », « Wiki » */
+.tabs { display: flex; gap: 4px; }
+/* téléphone : libellés sur une ligne, plus serrés ; sur un écran très étroit, la barre défile */
+@media (max-width: 600px) {
+  .tabs { gap: 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+}
+.tabs a {
+  padding: 9px 14px 8px; font-weight: 700; color: var(--muted); text-decoration: none;
+  border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; transition: color .15s, background-color .15s;
+}
+.tabs a:hover { color: var(--text); background: var(--surface-2); }
+.tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+.tabs a:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: -3px; }
+.tab-short { display: none; }
+@media (max-width: 600px) {
+  .tabs a { flex: none; padding: 9px 7px 8px; font-size: .84rem; white-space: nowrap; }
+  .tab-full { display: none; }
+  .tab-short { display: inline; }
+}
 
 main.wrap { padding-top: 24px; padding-bottom: 40px; }
 
@@ -372,6 +400,12 @@ th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--bor
 th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; background: var(--surface-2); }
 td.num, th.num { text-align: right; }
 td.name { white-space: normal; min-width: 160px; font-weight: 600; }
+/* image + nom d'un élément du détail : lien vers sa fiche du wiki (seul le nom change au survol) */
+.wiki-link { color: inherit; text-decoration: none; }
+.wiki-link:hover .wl { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.wiki-link .thumb { transition: transform .12s; }
+.wiki-link:hover .thumb { transform: scale(1.08); }
+.wiki-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 tr:last-child td { border-bottom: 0; }
 tr.is-done td { color: var(--muted); }
 tr.is-done td.name { font-weight: 400; }
@@ -426,6 +460,263 @@ tr.is-ignored td.name { font-weight: 400; text-decoration: line-through; text-de
 .tag:has(.thumb) { padding-left: 6px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
+/* ---------- Wiki ---------- */
+.wiki-bar { display: flex; flex-direction: column; gap: 14px; }
+.wiki-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.wiki-search { position: relative; flex: 1 1 240px; min-width: 0; }
+.wiki-search svg { position: absolute; left: 11px; top: 50%; width: 17px; height: 17px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.wiki-search input {
+  width: 100%; font: inherit; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--field-border); border-radius: 10px; padding: 8px 12px 8px 36px;
+}
+.wiki-search input::placeholder { color: var(--muted); }
+.wiki-th { flex: 0 0 170px; }
+.wiki-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-btn {
+  font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 99px; padding: 5px 12px;
+  transition: background-color .12s, border-color .12s;
+}
+.chip-btn small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+.chip-btn:hover { border-color: var(--accent); }
+.chip-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chip-btn[aria-pressed="true"] small { color: inherit; opacity: .75; }
+.chip-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+
+/* sous-catégories des équipements (une par héros) */
+.wiki-heroes { padding-top: 12px; margin-top: -2px; border-top: 1px solid var(--border); }
+.chip-btn:has(.chip-ic) { display: inline-flex; align-items: center; gap: 6px; padding-left: 5px; }
+.chip-ic { width: 22px; height: 22px; object-fit: contain; border-radius: 50%; }
+.wiki-sub + .wiki-sub { margin-top: 22px; }
+.wiki-sub h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: .95rem; }
+.wiki-sub h3 a { color: inherit; text-decoration: none; }
+.wiki-sub h3 a:hover { color: var(--accent); text-decoration: underline; }
+.wiki-sub h3 small { color: var(--muted); font-weight: 400; font-size: .8rem; }
+.wiki-sub-ic { width: 30px; height: 30px; object-fit: contain; }
+/* fiche d'un héros : ses équipements au-dessus du tableau des niveaux */
+.wiki-gear { margin: 0 0 22px; }
+.wiki-gear h3, .wiki-levels-title { margin: 0 0 10px; font-size: 1.05rem; }
+.wiki-gear h3 small { color: var(--muted); font-weight: 400; font-size: .85rem; margin-left: 4px; }
+/* fiche : caractéristiques fixes, bascule statistiques / amélioration, tableau des statistiques */
+.wiki-specs h3 { margin: 0 0 12px; font-size: 1.05rem; }
+.wiki-specs dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px 20px; margin: 0; }
+.wiki-specs dt { color: var(--muted); font-size: .8rem; }
+.wiki-specs dd { margin: 2px 0 0; font-weight: 700; }
+.wiki-specs dl > .wide { grid-column: 1 / -1; }            /* texte long (obtention d'un équipement) : toute la largeur */
+.wiki-specs dl > .wide dd { font-weight: 600; line-height: 1.5; }
+.wiki-table-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 12px; }
+/* menu « Pass d'or » des fiches : à droite de la barre, seulement avec le tableau d'amélioration */
+.wiki-gp-slot { margin-left: auto; }
+.wiki-gp { display: flex; align-items: center; gap: 10px; }
+.wiki-gp-lbl { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: .92rem; white-space: nowrap; }
+.wiki-gp .opt-ic { width: 24px; height: 24px; }
+.wiki-gp .dd { min-width: 150px; }
+.wiki-gp .dd-btn { padding: 6px 10px; }
+.wiki-table-bar .wiki-levels-title { margin: 0; }
+.wiki-stats th { white-space: normal; min-width: 92px; max-width: 170px; vertical-align: bottom; line-height: 1.3; }
+.wiki-table tr.is-sc td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+/* colonne « Niveau » figée quand le tableau défile horizontalement (fond opaque sous les surlignages) */
+.wiki-stats tr:first-child > th:first-child, .wiki-stats td.name { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: inset -1px 0 0 var(--border); }
+.wiki-stats tr:first-child > th:first-child { background: var(--surface-2); }
+.wiki-stats tr.is-mine td.name { background: linear-gradient(var(--info-soft), var(--info-soft)), var(--surface); }
+.wiki-stats tr.is-sc td.name { background: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)), var(--surface); }
+.wiki-source { margin: 10px 2px 0; font-size: .8rem; }
+/* icônes du jeu à droite des valeurs : cœur (PV), explosion (dégâts), chronomètre (durées) */
+.stat-ic { width: 1.15em; height: 1.15em; object-fit: contain; vertical-align: -.25em; margin-left: 2px; }
+.stat-ic[src$="damage.png"] { width: 1.4em; height: 1.4em; vertical-align: -.38em; margin: -.1em -.1em -.1em 1px; }  /* dessin plus aéré (étincelles) */
+/* description officielle (héros, capacité d'un équipement) sous le nom */
+.wiki-desc { margin: 8px 0 0; max-width: 68ch; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+/* héros : capacités venant des équipements, et capacité des héros de la base des ouvriers */
+.wiki-gear-note { margin: -4px 0 12px; font-size: .85rem; }
+/* rareté d'un équipement : étiquette du jeu (cartes, fiche du héros, titre de la fiche) */
+.rarity { display: block; height: 24px; width: auto; margin-top: 3px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .35)); }
+.rarity-lg { display: inline-block; height: 28px; margin: 0 0 0 12px; vertical-align: -.3em; }
+.wiki-ab-specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 20px; margin: 0 0 14px; }
+.wiki-ab-specs dt { color: var(--muted); font-size: .8rem; }
+.wiki-ab-specs dd { margin: 2px 0 0; font-weight: 700; }
+.wiki-ab-table th.grp { text-align: center; color: var(--text); }
+.wiki-ab-table .grp-start, .wiki-ab-table th.grp { border-left: 1px solid var(--border); }
+/* hôtel de ville : tableau de ses armes sous celui des niveaux */
+.wiki-weapons { margin-top: 26px; }
+.wiki-weapons h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.wiki-weapons-note { margin: 0 0 12px; font-size: .85rem; }
+.wiki-row-sub { display: block; margin-top: 2px; color: var(--muted); font-size: .78rem; font-weight: 400; }
+.wiki-weapons .wiki-table td.name { min-width: 215px; }
+.wiki-super .wiki-table td.name { min-width: 150px; }
+/* troupe : sa version super, sous le tableau des niveaux */
+.wiki-super-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 12px; }
+.wiki-super-pic { flex: none; width: 72px; height: 72px; object-fit: contain; }
+.wiki-super-head .wiki-desc { margin-top: 4px; }
+
+/* grandes catégories : image, titre plus grand et ligne de séparation soulignée par la couleur d'accent */
+.wiki-cat { margin-top: 44px; }
+.wiki-cat:first-child { margin-top: 26px; }
+.wiki-cat > h2 {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  margin: 0 0 16px; padding-bottom: 12px; font-size: 1.45rem; border-bottom: 2px solid var(--border);
+}
+.wiki-cat > h2::after { content: ""; position: absolute; left: 0; bottom: -2px; width: 72px; height: 2px; border-radius: 2px; background: var(--accent); }
+.wiki-cat > h2 small {
+  color: var(--muted); font-weight: 600; font-size: .8rem; line-height: 1;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 99px; padding: 4px 9px;
+}
+.wiki-cat-ic { flex: none; width: 46px; height: 46px; object-fit: contain; }
+.wiki-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.wiki-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; min-width: 0;
+  padding: 14px 10px 12px; color: var(--text); text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+  transition: border-color .12s, transform .12s;
+}
+.wiki-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.wiki-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.wiki-pic { width: 76px; height: 76px; object-fit: contain; margin-bottom: 4px; }
+.wiki-nopic { display: block; border-radius: 12px; background: var(--surface-2); }
+.wiki-name { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.wiki-empty { margin: 28px 0; text-align: center; }
+
+/* fiche d'un élément */
+.wiki-crumb { margin: 0 0 14px; }
+.wiki-head { display: flex; align-items: center; gap: 22px; }
+.wiki-hero { flex: none; width: 150px; height: 150px; object-fit: contain; }
+.wiki-title { min-width: 0; }
+.wiki-title h2 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.01em; }
+.wiki-en { margin: 2px 0 0; font-size: .9rem; }
+.wiki-facts, .wiki-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0 0; }
+.fact { font-size: .85rem; padding: 4px 10px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); }
+.fact a { color: var(--info); font-weight: 600; }
+.fact.is-mine { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 35%, transparent); }
+.wiki-table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.wiki-table td.name { min-width: 150px; }
+.wiki-table .thumb { width: 46px; height: 46px; }
+.wiki-table td.wrap-cell { white-space: normal; min-width: 240px; color: var(--muted); }
+.wiki-table td.wrap-cell a { color: var(--info); font-weight: 600; }
+.wiki-table tr.is-mine td { background: var(--info-soft); }
+.wiki-table tr.is-past td { background: var(--ok-soft); }               /* niveaux déjà améliorés */
+.wiki-stats tr.is-past td.name { background: linear-gradient(var(--ok-soft), var(--ok-soft)), var(--surface); }
+/* colonne « HDV requis » : petite image de l'HDV après le texte, alignée à droite */
+.th-cell { display: inline-flex; align-items: center; gap: 8px; }
+.th-ic { width: 30px; height: 30px; object-fit: contain; flex: none; }
+/* colonne « durée avec Pass d'or » (réduction choisie dans Mon village) */
+.wiki-table th.gp-col { color: var(--gp); }
+/* teinte par-dessus le fond de la ligne (vert, bleu ou neutre) : ombre intérieure, que les fonds de ligne n'effacent pas */
+.wiki-table .gp-col { box-shadow: inset 0 0 0 100vmax var(--gp-tint); }
+.th-gp { width: 16px; height: 16px; object-fit: contain; vertical-align: -3px; margin-right: 5px; }
+.wiki-table tfoot td { font-weight: 700; background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 0; }
+
+/* ---------- Mes équipements : coût en minerais d'un niveau à un autre ---------- */
+.eq-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
+.eq-layout > .card { margin-bottom: 20px; }
+.eq-title { font-size: 1.05rem; margin: 0 0 12px; }
+.eq-heroes { margin-bottom: 14px; }
+.eq-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.eq-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 10px 6px 9px;
+  font: inherit; color: var(--text); text-align: center; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; transition: border-color .12s, background-color .12s;
+}
+.eq-card:hover { border-color: var(--accent); }
+.eq-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.eq-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.eq-pic { width: 54px; height: 54px; object-fit: contain; }
+.eq-name { font-size: .85rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.eq-card .rarity { height: 20px; margin-top: 1px; }
+.eq-card .chip { margin-top: 2px; }
+/* simulateur : reste visible à côté de la liste quand on la fait défiler */
+.eq-sim { position: sticky; top: 16px; }
+.eq-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.eq-head-pic { flex: none; width: 72px; height: 72px; object-fit: contain; }
+.eq-head-txt { min-width: 0; }
+.eq-head h2 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 0; font-size: 1.35rem; }
+.eq-head h2 .rarity { display: inline-block; height: 24px; margin: 0; }
+.eq-head p { margin: 4px 0 0; font-size: .88rem; }
+.eq-head .link { font-weight: 600; }
+.eq-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.eq-fields .field { display: flex; flex-direction: column; gap: 6px; font-size: .85rem; font-weight: 600; min-width: 0; }
+.eq-fields small { color: var(--muted); font-weight: 400; font-size: .78rem; margin-top: -2px; }
+.eq-fields .opt-name { min-height: 0; }
+.eq-sum { margin: 20px 0 10px; }
+.eq-ores { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.eq-ore {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; text-align: center;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+}
+.eq-ore-ic { width: 40px; height: 40px; object-fit: contain; margin-bottom: 4px; }
+.eq-ore-val { font-size: 1.45rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; }
+.eq-ore-lbl { color: var(--muted); font-size: .8rem; }
+.eq-ore.is-zero .eq-ore-ic { filter: grayscale(1); opacity: .45; }
+.eq-ore.is-zero .eq-ore-val { color: var(--muted); }
+.eq-req { margin: 14px 0 0; font-size: .9rem; color: var(--muted); }
+.eq-req b { color: var(--text); }
+.eq-req.is-warn { color: var(--warn); }
+.eq-done { margin: 20px 0 0; }
+.eq-steps { margin-top: 16px; }
+.eq-steps summary { cursor: pointer; width: fit-content; font-weight: 600; color: var(--info); }
+.eq-steps[open] summary { margin-bottom: 10px; }
+.eq-table th, .eq-table td { padding-left: 10px; padding-right: 10px; }
+.eq-table th::first-letter { text-transform: uppercase; }
+@media (max-width: 960px) {
+  .eq-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .eq-sim { position: static; }
+}
+@media (max-width: 600px) {
+  /* tous les héros visibles sans défiler : 3 par ligne, l'image au-dessus du nom */
+  .eq-heroes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .eq-heroes .chip-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0;
+    padding: 7px 4px; border-radius: 12px; font-size: .78rem; line-height: 1.2; text-align: center; white-space: normal;
+  }
+  .eq-heroes .chip-ic { width: 30px; height: 30px; }
+  .eq-heroes .chip-btn small { display: none; }
+  .eq-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .eq-pic { width: 46px; height: 46px; }
+  .eq-ore-val { font-size: 1.15rem; }
+  .eq-ore-ic { width: 32px; height: 32px; }
+}
+
+/* ---------- Objets magiques : sur quelle amélioration utiliser chaque livre ---------- */
+.mg-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin: 0 0 18px; }
+.mg-note { margin: 0; flex: 1 1 320px; font-size: .9rem; line-height: 1.5; }
+/* deux sections (livres, marteaux), titrées comme les catégories du wiki */
+.mg-sec:first-child { margin-top: 6px; }
+.mg-intro { margin: -6px 0 14px; font-size: .9rem; line-height: 1.5; }
+.mg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
+.mg-grid > .card { margin: 0; }
+.mg-head { display: flex; align-items: center; gap: 14px; }
+.mg-book-pic { flex: none; width: 64px; height: 80px; object-fit: contain; filter: drop-shadow(0 3px 4px rgb(0 0 0 / .3)); }
+.mg-head-txt { min-width: 0; }
+.mg-head h3 { margin: 0; font-size: 1.15rem; }
+.mg-scope { margin: 2px 0 0; font-size: .85rem; font-weight: 700; color: var(--accent-strong); }
+.mg-desc { margin: 4px 0 0; font-size: .82rem; line-height: 1.4; }
+.mg-label { display: block; margin: 0 0 6px; color: var(--muted); font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+/* la meilleure amélioration : mise en avant, avec le temps gagné en grand */
+.mg-best { margin-top: 14px; padding: 12px; border-radius: 12px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.mg-best-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mg-t, .mg-n { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--text); text-decoration: none; }
+.mg-t-pic { flex: none; width: 52px; height: 52px; object-fit: contain; }
+.mg-t-txt, .mg-n-txt { display: flex; flex-direction: column; min-width: 0; }
+.mg-t-name { font-weight: 700; line-height: 1.25; }
+.mg-t-lvl, .mg-n-lvl { color: var(--muted); font-size: .8rem; }
+.mg-gain { display: flex; flex-direction: column; align-items: flex-end; flex: none; text-align: right; }
+.mg-time { font-size: 1.35rem; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; line-height: 1.15; }
+.mg-gain-lbl { color: var(--muted); font-size: .75rem; }
+.mg-gain-cost { margin-top: 6px; font-size: .95rem; font-weight: 800; }   /* marteau : ressources économisées */
+.mg-next-lbl { margin-top: 14px; }
+.mg-next { list-style: none; margin: 0; padding: 0; }
+.mg-next li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+.mg-n-pic { flex: none; width: 34px; height: 34px; object-fit: contain; }
+.mg-n-name { font-size: .9rem; font-weight: 600; line-height: 1.25; }
+.mg-n-time { flex: none; font-size: .9rem; font-weight: 700; white-space: nowrap; }
+.mg-t.wiki-link:hover .mg-t-name, .mg-n.wiki-link:hover .mg-n-name { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.mg-empty { margin: 14px 0 0; font-size: .9rem; }
+.mg-none p { margin: 0; }
+.mg-none-pics { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 16px; }
+.mg-none-pics img { width: 48px; height: 60px; object-fit: contain; }
+@media (max-width: 600px) {
+  .mg-time { font-size: 1.15rem; }
+  .mg-t-pic { width: 44px; height: 44px; }
+}
+
 /* ---------- Pied de page ---------- */
 .site-footer { border-top: 1px solid var(--border); color: var(--muted); font-size: .82rem; padding: 18px 0 28px; }
 .site-footer p { margin: 4px 0; }
@@ -441,6 +732,28 @@ tr.is-ignored td.name { font-weight: 400; text-decoration: line-through; text-de
 @media (max-width: 600px) {
   body { font-size: 14px; }
   .header-actions, .village-switch { width: 100%; }
+  .header-inner { min-height: 0; }
+  .logo { height: 52px; }
+  .wiki-th { flex: 1 1 100%; }
+  .wiki-bar { padding: 14px; }
+  #wiki-village .vs-btn { gap: 6px; padding: 5px 6px; font-size: .84rem; white-space: nowrap; }
+  #wiki-village .vs-ic { width: 22px; height: 22px; }
+  /* héros des équipements : une seule ligne qui défile, au lieu de sept lignes de puces */
+  .wiki-heroes { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -14px; padding-inline: 14px; scroll-padding-inline: 14px; }
+  .wiki-heroes::-webkit-scrollbar { display: none; }
+  .wiki-heroes .chip-btn { flex: none; }
+  .wiki-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .wiki-cat { margin-top: 36px; }
+  .wiki-cat > h2 { font-size: 1.25rem; gap: 10px; }
+  .wiki-cat-ic { width: 38px; height: 38px; }
+  .wiki-pic { width: 64px; height: 64px; }
+  .wiki-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .wiki-hero { width: 110px; height: 110px; }
+  .wiki-title h2 { font-size: 1.35rem; }
+  .wiki-table .thumb { width: 38px; height: 38px; }
+  .wiki-table td.name { min-width: 120px; }
+  .wiki-specs dl, .wiki-ab-specs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .wiki-weapons .wiki-table td.name { min-width: 150px; }
   .vs-btn { flex: 1 1 0; padding-right: 8px; }
   .import { padding: 20px; }
   .paste-main { align-items: stretch; }

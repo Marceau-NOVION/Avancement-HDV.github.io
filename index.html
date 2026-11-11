@@ -3,20 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Avancement HDV</title>
+  <title>Clash Tracker</title>
   <meta name="description" content="Importe l'export de ton village Clash of Clans pour calculer ton avancement et le temps restant pour maxer ton hôtel de ville.">
+  <!-- icône de l'onglet : app.js passe à la version bleue sur la base des ouvriers -->
+  <link rel="icon" id="favicon" type="image/png" sizes="64x64" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="site-header">
     <div class="wrap header-inner">
       <div class="brand">
-        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
-          <path d="M16 2 4 7v8c0 7.2 5 13 12 15 7-2 12-7.8 12-15V7L16 2Z" fill="currentColor"/>
-          <path d="M10 18.5 14.2 22 22 11.5" fill="none" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <!-- logo du village principal, et sa version bleue pour la base des ouvriers (affichée selon data-village) -->
+        <img class="logo logo-home" src="img/logo.webp" width="245" height="256" alt="">
+        <img class="logo logo-bb" src="img/logo-bb.webp" width="241" height="256" alt="">
         <div>
-          <h1 id="site-title">Avancement HDV</h1>
+          <h1 id="site-title">Clash Tracker</h1>
           <p class="tagline" id="tagline">Où en est ton village, et combien de temps avant de maxer ton hôtel de ville&nbsp;?</p>
         </div>
       </div>
@@ -29,9 +31,18 @@
         <button id="btn-reset" class="btn ghost" type="button" hidden>Importer un autre village</button>
       </div>
     </div>
+    <!-- onglets : l'outil d'avancement, le simulateur d'équipements (equip.js) et le wiki des données du jeu (wiki.js) -->
+    <nav class="wrap tabs" aria-label="Sections du site">
+      <!-- sur téléphone, libellés courts (tab-short) pour que les quatre onglets tiennent sur une ligne -->
+      <a href="#" data-tab="tool" aria-current="page"><span class="tab-full">Mon village</span><span class="tab-short">Village</span></a>
+      <a href="#equipements" data-tab="equip"><span class="tab-full">Mes équipements</span><span class="tab-short">Équipements</span></a>
+      <a href="#objets-magiques" data-tab="magic">Objets magiques</a>
+      <a href="#wiki" data-tab="wiki">Wiki</a>
+    </nav>
   </header>
 
   <main class="wrap">
+   <div id="tool">
     <!-- Import -->
     <section id="import" class="card import" aria-labelledby="import-title">
       <h2 id="import-title">Importer ton village</h2>
@@ -164,6 +175,78 @@
         <div id="details"></div>
       </section>
     </section>
+   </div>
+
+    <!-- Wiki : liste filtrable, puis fiche d'un élément (remplis par wiki.js) -->
+    <section id="wiki" hidden>
+      <div id="wiki-list">
+        <div class="card wiki-bar">
+          <div class="wiki-tools">
+            <div class="village-switch" id="wiki-village" role="group" aria-label="Village du wiki">
+              <button type="button" class="vs-btn" data-village="home" aria-pressed="true"><img class="vs-ic" alt="">Village principal</button>
+              <button type="button" class="vs-btn" data-village="bb" aria-pressed="false"><img class="vs-ic" alt="">Base des ouvriers</button>
+            </div>
+            <label class="wiki-search">
+              <span class="sr-only">Rechercher dans le wiki</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="wiki-q" placeholder="Rechercher un bâtiment, une troupe, un sort…" autocomplete="off">
+            </label>
+            <div class="wiki-th">
+              <span class="sr-only" id="lbl-wiki-th">Niveau d'hôtel de ville</span>
+              <div class="dd" id="dd-wiki-th" data-label="lbl-wiki-th"></div>
+            </div>
+          </div>
+          <div class="wiki-chips" id="wiki-chips" role="group" aria-label="Catégories"></div>
+          <div class="wiki-chips wiki-heroes" id="wiki-heroes" role="group" aria-label="Équipements par héros" hidden></div>
+        </div>
+        <div id="wiki-results" aria-live="polite"></div>
+      </div>
+      <div id="wiki-item" hidden></div>
+      <!-- menu « Pass d'or » des fiches : créé une fois, placé par wiki.js dans la barre du tableau d'amélioration -->
+      <div class="wiki-gp" id="wiki-gp" hidden>
+        <span class="wiki-gp-lbl" id="lbl-wiki-gp"><img class="opt-ic" src="img/gold_pass.webp" alt="">Pass d'or</span>
+        <div class="dd" id="dd-wiki-gp" data-label="lbl-wiki-gp"></div>
+      </div>
+    </section>
+
+    <!-- Mes équipements : minerais nécessaires pour monter un équipement au niveau voulu (remplis par equip.js) -->
+    <section id="equip" hidden>
+      <div class="eq-layout">
+        <section class="card eq-pick" aria-labelledby="eq-pick-title">
+          <h2 id="eq-pick-title" class="eq-title">Choisis un équipement</h2>
+          <div class="wiki-chips eq-heroes" id="eq-heroes" role="group" aria-label="Héros"></div>
+          <div class="eq-grid" id="eq-grid"></div>
+        </section>
+        <section class="card eq-sim" id="eq-sim" aria-label="Coût en minerais">
+          <div class="eq-head" id="eq-head"></div>
+          <div class="eq-fields">
+            <div class="field">
+              <span class="opt-name" id="lbl-eq-from">Niveau actuel</span>
+              <div class="dd" id="dd-eq-from" data-label="lbl-eq-from"></div>
+              <small id="eq-from-note"></small>
+            </div>
+            <div class="field">
+              <span class="opt-name" id="lbl-eq-to">Niveau cible</span>
+              <div class="dd" id="dd-eq-to" data-label="lbl-eq-to"></div>
+              <small id="eq-to-note"></small>
+            </div>
+          </div>
+          <div id="eq-result"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Objets magiques : sur quelle amélioration utiliser chaque livre (remplis par magic.js) -->
+    <section id="magic" hidden>
+      <div class="mg-top">
+        <div class="village-switch" id="mg-village" role="group" aria-label="Village" hidden>
+          <button type="button" class="vs-btn" data-village="home" aria-pressed="true"><img class="vs-ic" alt="">Village principal</button>
+          <button type="button" class="vs-btn" data-village="bb" aria-pressed="false"><img class="vs-ic" alt="">Base des ouvriers</button>
+        </div>
+        <p class="mg-note muted" id="mg-note"></p>
+      </div>
+      <div class="mg-books" id="mg-books"></div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -175,6 +258,9 @@
 
   <script src="data/coc-data.js"></script>
   <script src="data/coc-images.js"></script>
+  <script src="wiki.js"></script>
+  <script src="equip.js"></script>
+  <script src="magic.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

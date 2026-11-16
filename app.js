@@ -8,6 +8,9 @@
     TH: 1000001, LAB: 1000007, HH: 1000071, BS: 1000070, PH: 1000068,
     HUT: 1000015, BOB: 1000064, WALL: 1000010, APP: 93000000, LAB_ASSIST: 93000001, PROSPECTOR: 93000003,
   };
+  // remparts : [HDV, niveau, nombre max de remparts à ce niveau]. HDV 19 : 150 remparts au plus au niveau 20
+  // (notes de mise à jour du 16 novembre 2026), les autres restent au niveau 19
+  const WALL_CAPS = [[19, 20, 150]];
   // prix en gemmes de la 1re à la 5e cabane d'ouvrier (absent de la table de jeu : il dépend du numéro de la cabane)
   const HUT_GEMS = [0, 250, 500, 1000, 2000];
   const STORE_KEY = 'avancement-hdv:village';
@@ -107,7 +110,8 @@
   const VILLAGES = {
     home: {
       key: 'home', t: D, hallUnlocks: D.th, hall: ID.TH, lab: ID.LAB, wall: ID.WALL, hut: ID.HUT,
-      sec: { buildings: 'buildings', traps: 'traps', heroes: 'heroes', lab: ['units', 'siege_machines', 'spells'] },
+      // squads : brigades (HDV 19), au cas où l'export du jeu les range à part des troupes
+      sec: { buildings: 'buildings', traps: 'traps', heroes: 'heroes', lab: ['units', 'squads', 'siege_machines', 'spells'] },
       short: 'HDV', the: 'l\'HDV', this: 'cet HDV', hallName: 'hôtel de ville', your: 'Ton hôtel de ville',
       labName: 'Laboratoire', labShort: 'labo', buildersNote: 'cabanes + B.O.B', maxBuilders: 7,
       tagline: 'Où en est ton village, et combien de temps avant de maxer ton hôtel de ville\u00a0?',
@@ -310,7 +314,12 @@
         while (list2.length < n) list2.push(NEW);
         const max = maxLv(e, T), base = maxLv(e, T - 1);
         const cat = isTrap ? 'traps' : (+key === V.wall ? 'walls' : 'bld');
-        for (const s of list2) push(cat, +key, e, s, max, base, cat === 'walls' ? 'cost' : 'time');
+        // remparts limités en nombre à un niveau (les plus avancés d'abord) ; les autres s'arrêtent juste en dessous
+        const cap = cat === 'walls' && V.key === 'home' ? WALL_CAPS.find(([th, lvl]) => T >= th && max >= lvl) : null;
+        list2.forEach((s, k) => {
+          const m = cap && k >= cap[2] ? cap[1] - 1 : max;
+          push(cat, +key, e, s, m, Math.min(base, m), cat === 'walls' ? 'cost' : 'time');
+        });
       }
     };
     structs(v[V.sec.buildings], B.buildings, false);
@@ -942,9 +951,22 @@
     unk.hidden = !nu;
     if (unk.dataset.key !== key) {          // ne pas refermer les détails à chaque rafraîchissement
       unk.dataset.key = key;
+      // nature de chaque élément, d'après son identifiant du jeu (1000xxxx bâtiment, 90xxxxxx équipement…)
+      const KINDS = { 1: ['bâtiment', 'bâtiments'], 12: ['piège', 'pièges'], 4: ['troupe', 'troupes'], 26: ['sort', 'sorts'],
+        28: ['héros', 'héros'], 73: ['familier', 'familiers'], 90: ['équipement', 'équipements'], 107: ['gardien', 'gardiens'] };
+      const count = new Map();
+      for (const id of A.unknown) {
+        const k = KINDS[Math.floor(id / 1e6)] || ['élément', 'éléments'];
+        count.set(k, (count.get(k) || 0) + 1);
+      }
+      const what = joinFr([...count].map(([k, n]) => `${n} ${n > 1 ? k[1] : k[0]}`));
       const pl = nu > 1;
+      const onlyEquip = A.unknown.every((id) => Math.floor(id / 1e6) === 90);
       unk.innerHTML = nu
-        ? `${nu} élément${pl ? 's' : ''} récent${pl ? 's' : ''} de ton village ${pl ? 'ne sont' : 'n\'est'} pas encore connu${pl ? 's' : ''} du site&nbsp;: ${pl ? 'ils ne sont pas comptés' : 'il n\'est pas compté'} dans le calcul.`
+        ? `${what} de ton village ${pl ? 'ne sont' : 'n\'est'} pas encore dans les données du jeu disponibles`
+          + (onlyEquip
+            ? `&nbsp;: ${pl ? 'ils n\'apparaissent' : 'il n\'apparaît'} pas dans la section Équipement. Le temps calculé n'est pas concerné, les équipements se payant en minerais.`
+            : `&nbsp;: ${pl ? 'ils ne sont pas comptés' : 'il n\'est pas compté'} dans le calcul.`)
           + `<details><summary>Détails techniques</summary>Identifiant${pl ? 's' : ''}&nbsp;: ${A.unknown.map(esc).join(', ')}. Régénère <code>data/coc-data.js</code> avec <code>tools/build_data.py</code> quand une table plus récente est disponible.</details>`
         : '';
     }

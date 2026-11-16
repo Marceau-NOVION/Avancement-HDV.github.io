@@ -6,7 +6,7 @@
   const $ = (sel) => document.querySelector(sel);
 
   const HALL = { home: 1000001, bb: 1000034 };
-  const B = { LAB: 1000007, HERO_HALL: 1000071, BLACKSMITH: 1000070, PET_HOUSE: 1000068, STAR_LAB: 1000046 };
+  const B = { LAB: 1000007, HERO_HALL: 1000071, BLACKSMITH: 1000070, PET_HOUSE: 1000068, STAR_LAB: 1000046, SQUAD_BARRACKS: 1000106 };
   const PROSPECTOR = '93000003';
   const VILLAGE = {
     home: { name: 'Village principal', short: 'HDV', the: 'l\'HDV', hall: 'Hôtel de ville' },
@@ -14,7 +14,7 @@
   };
   // catégories, dans l'ordre d'affichage
   const CATS = [
-    ['hall', 'Hôtel de ville'], ['bld', 'Bâtiments'], ['traps', 'Pièges'], ['troop', 'Troupes'], ['spell', 'Sorts'],
+    ['hall', 'Hôtel de ville'], ['bld', 'Bâtiments'], ['traps', 'Pièges'], ['troop', 'Troupes'], ['squad', 'Brigades'], ['spell', 'Sorts'],
     ['siege', 'Engins de siège'], ['heroes', 'Héros'], ['guardians', 'Gardiens'], ['pets', 'Familiers'],
     ['equip', 'Équipements'], ['helpers', 'Assistants'],
   ];
@@ -22,7 +22,7 @@
   // image du titre de chaque catégorie : le bâtiment qui s'en occupe (caserne, usine de sorts, atelier, forge…),
   // sinon le premier élément de la catégorie
   const CAT_PIC = {
-    home: { hall: 1000001, bld: 1000015, traps: 12000000, troop: 1000006, spell: 1000020, siege: 1000059, heroes: 1000071, pets: 1000068, equip: 1000070 },
+    home: { hall: 1000001, bld: 1000015, traps: 12000000, troop: 1000006, squad: 1000106, spell: 1000020, siege: 1000059, heroes: 1000071, pets: 1000068, equip: 1000070 },
     bb: { hall: 1000034, bld: 1000078, traps: 12000013, troop: 1000040 },
   };
 
@@ -78,7 +78,9 @@
       for (const [id, e] of Object.entries(t.traps)) add(village, 'traps', 'struct', id, e);
       // labo : le niveau dépend du laboratoire, le déblocage de la caserne (ou de l'usine de sorts, de l'atelier)
       for (const [id, e] of Object.entries(t.lab)) {
-        add(village, e.c, 'unit', id, e, { req: home ? B.LAB : B.STAR_LAB, unlock: e.pb ? { b: e.pb, lvl: e.pbl } : null });
+        // brigades (débloquées par la caserne des brigades) : leur propre catégorie, séparée des troupes
+        const cat = e.pb === B.SQUAD_BARRACKS ? 'squad' : e.c;
+        add(village, cat, 'unit', id, e, { req: home ? B.LAB : B.STAR_LAB, unlock: e.pb ? { b: e.pb, lvl: e.pbl } : null });
       }
       for (const [id, e] of Object.entries(t.heroes)) add(village, 'heroes', 'unit', id, e, { req: home ? B.HERO_HALL : 0 });
       if (!home) continue;
@@ -172,7 +174,7 @@
     const bb = it.village === 'bb';
     const secs = {
       hall: [bb ? 'buildings2' : 'buildings'], bld: [bb ? 'buildings2' : 'buildings'], traps: [bb ? 'traps2' : 'traps'],
-      troop: bb ? ['units2'] : ['units'], spell: ['spells'], siege: ['siege_machines'], heroes: [bb ? 'heroes2' : 'heroes'],
+      troop: bb ? ['units2'] : ['units'], squad: ['units', 'squads'], spell: ['spells'], siege: ['siege_machines'], heroes: [bb ? 'heroes2' : 'heroes'],
       guardians: ['guardians'], pets: ['pets'], equip: ['equipment'], helpers: ['helpers'],
     }[it.cat];
     const m = new Map();
@@ -585,7 +587,7 @@
           ${foot ? `<tfoot>${foot}</tfoot>` : ''}
         </table>
       </div>
-      ${S ? `<p class="muted wiki-source">Statistiques : <a class="link" href="https://github.com/chiefpansancolt/clash-of-clans-data" rel="noopener">clash-of-clans-data</a>, données du jeu mises en forme par la communauté.</p>` : ''}`;
+      ${S ? `<p class="muted wiki-source">Statistiques : <a class="link" href="https://github.com/chiefpansancolt/clash-of-clans-data" rel="noopener">clash-of-clans-data</a>, données du jeu mises en forme par la communauté, complétées par <a class="link" href="https://github.com/ClashKingInc/clashy.py" rel="noopener">clashy.py</a> et les <a class="link" href="https://supercell.com/en/games/clashofclans/blog/release-notes/the-clash-of-titans-update-is-rolling-out/" rel="noopener">notes de mise à jour</a> de l'HDV 19.</p>` : ''}`;
     const slot = $('#wiki-item .wiki-gp-slot');
     if (slot && gpBox) {
       gpMenu.set(ui.gpOptions(), ui.goldPass(it.village));
